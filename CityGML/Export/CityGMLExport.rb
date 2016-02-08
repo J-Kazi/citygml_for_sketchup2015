@@ -18,6 +18,10 @@ module FHGelsenkirchen
         end
         dir.each do  |p|
           if(p != "." and p != "..")
+            #if p =~ /\.(jpe?g|tiff?|bmp|png)$/
+            #  aaa = "xxx"              
+            #end
+            
             if p.rindex(".jpg") or p.rindex(".jpeg") or p.rindex(".bmp") or p.rindex(".tif") or p.rindex(".png")
               x = []
               y = ""
@@ -60,29 +64,12 @@ module FHGelsenkirchen
     end
 
     def filebasename(filepath)
-      ret_str = ""
-      for i in 0..(filepath.length() -1)
-        case filepath[i]
-        when 92 # \
-          ret_str = ""
-        when 47 # /
-          ret_str = ""
-        when 46 # .
-          return ret_str
-        else
-          ret_str << filepath[i]
-        end
-      end
-      return ""
+      return File.basename(filepath, File.extname(filepath))
     end
 
+    # append ".xml" to filename, if no extension present
     def filename_with_type(filepath)
-      for i in 0..(filepath.length() -1)
-        if(filepath[i] == 46) # .
-          return filepath
-        end
-      end
-      filepath << '.xml'
+      filepath += ".xml" if File.extname(filepath).empty?
       return filepath
     end
 
@@ -236,24 +223,8 @@ module FHGelsenkirchen
         name = model.name
         name = "Untitled" if(name.empty?)
         if(!isbatch)
-          while(true)
-            savepath = UI.savepanel("CityGML File", nil, name +".xml")
-            return if(savepath == nil)
-            if((savepath =~ /ä|ö|ü|ß|Ä|Ö|Ü|€/) == nil)
-              break;
-            else
-              message = "Filepath: " << savepath << " contains not allowed character:"
-              message << " ä" if(savepath =~ /ä/)
-              message << " ö" if(savepath =~ /ö/)
-              message << " ü" if(savepath =~ /ü/)
-              message << " ß" if(savepath =~ /ß/)
-              message << " Ä" if(savepath =~ /Ä/)
-              message << " Ö" if(savepath =~ /Ö/)
-              message << " Ü" if(savepath =~ /Ü/)
-              message << " €" if(savepath =~ /€/)
-              puts message
-            end
-          end
+          savepath = UI.savepanel("CityGML File", nil, name +".xml")
+          return if(savepath == nil)
           savepath = filename_with_type(savepath)
           @filename_pur = filebasename(savepath)
         end
@@ -365,7 +336,8 @@ module FHGelsenkirchen
         }
         #Callback zum Zentrieren des Dialogs
         dlg.add_action_callback("move") { |d, a|
-          xy, wh = a.split(":")
+          #x, y = xy.split(",").map{ |b| b.to_i }
+          #w, h = wh.split(",").map{ |b| b.to_i }
 
           x, y = xy.split(",")
           x = x.to_i
@@ -582,7 +554,7 @@ module FHGelsenkirchen
       interiorwallsurfaces  = Hash.new ##
       outerfloorsurfaces = Hash.new ##
       nosurfacetype = ""
-
+      
       model = Sketchup.active_model
       #Erzeuge XML-Datei
       @handle = File.open(savepath, "w")
@@ -597,8 +569,32 @@ module FHGelsenkirchen
         next if( !entity.layer.visible?)
         if(entity.class == Sketchup::Group or entity.class == Sketchup::Face or entity.class == Sketchup::ComponentInstance)
           @entities << entity if(!entity.hidden? and entity.visible?)
+          #UI.messagebox(model.entities.length)
+          #abort
         end
       end
+      
+      # count recursively all entities (to display progress in status bar)
+      def count_entities(entities)
+        total = 0
+
+        entities.each do |entity|
+          if(entity.class == Sketchup::ComponentInstance)
+            total += count_entities(entity.definition.entities())
+          elsif (entity.class == Sketchup::Group)
+            total += count_entities(entity.entities())
+          elsif (entity.class == Sketchup::Face)
+            total += 1
+          end  
+        end
+
+        return total
+      end   
+      
+      $total_entities = count_entities(Sketchup.active_model.entities)
+      $exported_entities = 0
+      
+      
       tw = Sketchup.create_texture_writer
       #Sucht alle Texturen im Modell
       findtextures(@entities,tw)
@@ -739,7 +735,7 @@ module FHGelsenkirchen
                   @handle << "<app:appearance>\n"
                   @handle << "<app:Appearance>\n"
                   @parameterizedTextureHash.each_pair { |key, value|
-                    @handle << "<app:surfaceDataMember>\n"
+                    @handle << "\n<app:surfaceDataMember>\n"
                     @handle << "<app:ParameterizedTexture>\n"
                     if(@texturepath != "")
                       @handle << "<app:imageURI>/#{@texturepath}/#{key}</app:imageURI>\n"
@@ -766,7 +762,7 @@ module FHGelsenkirchen
                   @parameterizedTextureHash.each_pair { |key, value|
                     @handle << "<app:appearance>\n"
                     @handle << "<app:Appearance>\n"
-                    @handle << "<app:surfaceDataMember>\n"
+                    @handle << "\n<app:surfaceDataMember>\n"
                     @handle << "<app:ParameterizedTexture>\n"
                     if(@texturepath != "")
                       @handle << "<app:imageURI>/#{@texturepath}/#{key}</app:imageURI>\n"
@@ -830,7 +826,7 @@ module FHGelsenkirchen
               @handle << "<app:appearance>\n"
               @handle << "<app:Appearance>\n"
               @parameterizedTextureHash.each_pair { |key, value|
-                @handle << "<app:surfaceDataMember>\n"
+                @handle << "\n<app:surfaceDataMember>\n"
                 @handle << "<app:ParameterizedTexture>\n"
                 if(@texturepath != "")
                   @handle << "<app:imageURI>/#{@texturepath}/#{key}</app:imageURI>\n"
@@ -857,7 +853,7 @@ module FHGelsenkirchen
               @parameterizedTextureHash.each_pair { |key, value|
                 @handle << "<app:appearance>\n"
                 @handle << "<app:Appearance>\n"
-                @handle << "<app:surfaceDataMember>\n"
+                @handle << "\n<app:surfaceDataMember>\n"
                 @handle << "<app:ParameterizedTexture>\n"
                 if(@texturepath != "")
                   @handle << "<app:imageURI>/#{@texturepath}/#{key}</app:imageURI>\n"
@@ -898,7 +894,7 @@ module FHGelsenkirchen
           @handle << "<app:appearanceMember>\n"
           @handle << "<app:Appearance>\n"
           @parameterizedTextureHash.each_pair { |key, value|
-            @handle << "<app:surfaceDataMember>\n"
+            @handle << "\n<app:surfaceDataMember>\n"
             @handle << "<app:ParameterizedTexture>\n"
             if(@texturepath != "")
               @handle << "<app:imageURI>/#{@texturepath}/#{key}</app:imageURI>\n"
@@ -923,7 +919,7 @@ module FHGelsenkirchen
           @parameterizedTextureHash.each_pair { |key, value|
             @handle << "<app:appearanceMember>\n"
             @handle << "<app:Appearance>\n"
-            @handle << "<app:surfaceDataMember>\n"
+            @handle << "\n<app:surfaceDataMember>\n"
             @handle << "<app:ParameterizedTexture>\n"
             if(@texturepath != "")
               @handle << "<app:imageURI>/#{@texturepath}/#{key}</app:imageURI>\n"
@@ -1802,6 +1798,8 @@ if(interiorwallsurfaces.size > 0)
     #Generiert eine neue BuildingId
     def newrandombuildingid()
       while(true)
+        #id = @filename_pur.match(/^_/) ? "" : "_"
+        
         if(@filename_pur.match(/^_/))
           id = ""
         else
@@ -1866,6 +1864,7 @@ if(interiorwallsurfaces.size > 0)
         if(entity.class == Sketchup::Face)
           polygonpos += 1 ## doplneny pozadovany typ
           nosurfacetype << writeface(entity, transformation, za + 1, tw, actbuildingid, polygonpos, groundsurfaces, roofsurfaces, wallsurfaces, floorsurfaces, outerfloorsurfaces, intbuildinginstallations, buildinginstallations, doors, windows, ceilingsurfaces, interiorwallsurfaces, nosurfacetype)
+          
           #Bei Gruppen und ComponentInstance rekursiver aufruf
         elsif(entity.class ==Sketchup::Group)
           if(entity.name != "")
@@ -1969,6 +1968,17 @@ if(interiorwallsurfaces.size > 0)
     #Parameter 10: floorsurfaces ist Buffer für FloorSurfaces
 	#Parameter 11: nosurfacetype ist Buffer für alle Flächen ohne Surfacetyp
     def writeface(face, transformation, za, tw, actbuildingid, polygonpos, groundsurfaces, roofsurfaces, wallsurfaces, floorsurfaces, outerfloorsurfaces, intbuildinginstallations, buildinginstallations, doors, windows, ceilingsurfaces, interiorwallsurfaces, nosurfacetype)
+      
+      result = Sketchup.set_status_text "#{$exported_entities.to_s()}/#{$total_entities.to_s()} entities exported!", SB_PROMPT
+      $exported_entities += 1
+      
+      #puts $exported_entities.to_s()
+      
+      #if $exported_entities % 1000 == 0
+        #UI.messagebox($exported_entities.to_s())
+        
+      #end
+      
       #Wenn Nicht sichtbarer Layer, export überspringen
       return "" if(!face.layer.visible?)
       tmpfile = ""
@@ -2108,7 +2118,7 @@ if(interiorwallsurfaces.size > 0)
         begin
           saved_material = @x3dmaterial.fetch(material.name)
           #if(polygonID != nil)
-          saved_material << "<app:target>##{polygonID.to_s}</app:target>\n"
+          saved_material << "\t<app:target>##{polygonID.to_s}</app:target>\n"
           #else
           # saved_material << "<app:target>##{actbuildingid}_Polygon_#{polygonpos}</app:target>\n"
           #end
@@ -2121,17 +2131,17 @@ if(interiorwallsurfaces.size > 0)
           end
           color = material.color
   
-          materialbuf = "<app:surfaceDataMember>\n<app:X3DMaterial>\n"
-          materialbuf << "<app:ambientIntensity>0.2</app:ambientIntensity>\n"
-          materialbuf << "<app:diffuseColor>"
-          materialbuf << "#{color.red.to_f / 255} #{color.green.to_f / 255} #{color.blue.to_f / 255}</app:diffuseColor>\n"
-          materialbuf << "<app:emissiveColor>0.0 0.0 0.0</app:emissiveColor>\n"
-          materialbuf << "<app:specularColor>1.0 1.0 1.0</app:specularColor>\n"
-          materialbuf << "<app:shininess>0.2</app:shininess>\n"
-          materialbuf << "<app:transparency>#{1.0 - material.alpha.to_f()}</app:transparency>\n"
-          materialbuf << "<app:isSmooth>false</app:isSmooth>\n"
+          materialbuf = "\n<app:surfaceDataMember>\n"
+          materialbuf << "<app:X3DMaterial>\n"          
+          materialbuf << "\t<app:ambientIntensity>0.2</app:ambientIntensity>\n"
+          materialbuf << "\t<app:diffuseColor>#{color.red.to_f / 255} #{color.green.to_f / 255} #{color.blue.to_f / 255}</app:diffuseColor>\n"
+          materialbuf << "\t<app:emissiveColor>0.0 0.0 0.0</app:emissiveColor>\n"
+          materialbuf << "\t<app:specularColor>1.0 1.0 1.0</app:specularColor>\n"
+          materialbuf << "\t<app:shininess>0.2</app:shininess>\n"
+          materialbuf << "\t<app:transparency>#{1.0 - material.alpha.to_f()}</app:transparency>\n"
+          materialbuf << "\t<app:isSmooth>false</app:isSmooth>\n"
           #if(polygonID != nil)
-          materialbuf << "<app:target>##{polygonID.to_s}</app:target>\n"
+          materialbuf << "\t<app:target>##{polygonID.to_s}</app:target>\n"
           #else
           #   materialbuf << "<app:target>##{actbuildingid}_Polygon_#{polygonpos}</app:target>\n"
           # end
