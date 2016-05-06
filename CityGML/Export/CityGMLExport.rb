@@ -1,6 +1,7 @@
 require 'CityGML\Export\WorldFileLoader'
 require 'CityGML\Export\GMLExportDialog'
-require 'CityGML/Attribute/attribute' 
+require 'CityGML/Attribute/attribute'
+require 'CityGML\UI\ProgressBar'
 
 module FHGelsenkirchen
   #Klasse zum Exportieren von Modellen
@@ -220,10 +221,10 @@ module FHGelsenkirchen
 
         JF::RubyToolbar::openConsole
         model = Sketchup.active_model
-        name = model.name
-        name = "Untitled" if(name.empty?)
+        #name = model.name
+        #name = "Untitled" if(name.empty?)
         if(!isbatch)
-          savepath = UI.savepanel("CityGML File", nil, name +".xml")
+          savepath = UI.savepanel("CityGML File", nil, "*.gml|*.gml|*.xml|*.xml||")
           return if(savepath == nil)
           savepath = filename_with_type(savepath)
           @filename_pur = filebasename(savepath)
@@ -339,7 +340,9 @@ module FHGelsenkirchen
           #x, y = xy.split(",").map{ |b| b.to_i }
           #w, h = wh.split(",").map{ |b| b.to_i }
 
-          x, y = xy.split(",")
+          xy, wh = a.split(":")
+		  
+		  x, y = xy.split(",")
           x = x.to_i
           y = y.to_i
 
@@ -457,11 +460,11 @@ module FHGelsenkirchen
 
             #Speichert den XML-Tag für das LOD
             @lod = "bldg:lod" + @lodNum.to_s();
-            if(@gmlType == 1)
-              @lod += "Solid"
-            else
-              @lod += "MultiSurface"
-            end
+            #if(@gmlType == 1)
+              #@lod += "Solid"
+            #else
+            @lod += "MultiSurface"
+            #end
 
             dlg.close()
 
@@ -531,7 +534,7 @@ module FHGelsenkirchen
       stdgroundsurfaces = Hash.new
       stdwallsurfaces = Hash.new
       stdroofsurfaces = Hash.new
-	    stdouterfloorsurfaces  = Hash.new ##
+	  stdouterfloorsurfaces  = Hash.new ##
       stdintbuildinginstallations  = Hash.new ##
       stdbuildinginstallations  = Hash.new ##
       stddoors  = Hash.new ##
@@ -593,6 +596,7 @@ module FHGelsenkirchen
       
       $total_entities = count_entities(Sketchup.active_model.entities)
       $exported_entities = 0
+	  $pb = ProgressBar.new($total_entities,"Progress...")
       
       
       tw = Sketchup.create_texture_writer
@@ -675,7 +679,7 @@ module FHGelsenkirchen
               polygonpos += 1
               #Face wird exportiert ## doplneny pozadovany typ
               nosurfacetype << writeface(explode, transformation,1, tw, actbuildingid, polygonpos, groundsurfaces, roofsurfaces, wallsurfaces, floorsurfaces, outerfloorsurfaces, intbuildinginstallations, buildinginstallations, doors, windows, ceilingsurfaces, interiorwallsurfaces, nosurfacetype)
-              #Wird erneut eine Group/ComponentInstance gefunden, Methode writegroup aufgerufen
+			  #Wird erneut eine Group/ComponentInstance gefunden, Methode writegroup aufgerufen
             elsif(explode.class ==Sketchup::Group)
               if(explode.name != "")
                 puts "exporting #{explode.name}"
@@ -952,9 +956,16 @@ module FHGelsenkirchen
       @handle.close()
       puts "#{savepath} successfully written."
       begin
+	    dlg_str = UI::WebDialog.new("C", false, nil, 0, 0, 0, 0, false)
+        dlg_str.set_position(400, 400)
+		dlg_str.set_on_close{
+			UI.messagebox("Export completed!", MB_OK)
+		}
         puts "#{File.size(savepath)} bytes written."
         puts "Export completed!"
         puts "Console can be closed"
+		dlg_str.show()
+		dlg_str.close()
       rescue => e
       end
     rescue => e
@@ -985,27 +996,26 @@ module FHGelsenkirchen
       return if(groundsurfaces.size == 0 and wallsurfaces.size == 0 and roofsurfaces.size == 0 and floorsurfaces.size == 0 and outerfloorsurfaces.size == 0 and intbuildinginstallations.size == 0 and buildinginstallations.size == 0 and doors.size == 0 and windows.size == 0 and ceilingsurfaces.size == 0 and interiorwallsurfaces.size == 0 and nosurfacetype == "")
       if(nosurfacetype != "")
         @handle << "<#{lod}>\n"
-        if(@gmlType == 1)
-          @handle << "<gml:CompositeSolid>\n"
-        else
-          @handle << "<gml:MultiSurface"
-          coordinateSystemString()
-          @handle << ">\n"
-        end
+        #if(@gmlType == 1)
+          #@handle << "<gml:CompositeSolid>\n"
+        #else
+        @handle << "<gml:MultiSurface"
+        coordinateSystemString()
+        @handle << ">\n"
+        #end
         
         @handle << nosurfacetype
         
-        if(@gmlType == 1)
-          @handle << "</gml:CompositeSolid>\n"
-        else
-          @handle << "</gml:MultiSurface>\n"
-        end
+        #if(@gmlType == 1)
+          #@handle << "</gml:CompositeSolid>\n"
+        #else
+        @handle << "</gml:MultiSurface>\n"
+        #end
         
         @handle << "</#{lod}>\n"
       end
       #Gibt es Surfaces mit Typ, werden diese im boundedBy-Tag gespeichert ## doplneny pozadovany typ
       if(wallsurfaces.size > 0 or roofsurfaces.size > 0 or floorsurfaces.size > 0 or outerfloorsurfaces.size > 0 or groundsurfaces.size > 0 or intbuildinginstallations.size > 0 or buildinginstallations.size > 0 or doors.size > 0 or windows.size > 0 or ceilingsurfaces.size > 0 or interiorwallsurfaces.size > 0)
-        
         if(wallsurfaces.size > 0)
           wallsurfaces.each_pair {|key, value|
             if(key != "" and key != nil and !@noid)
@@ -1645,13 +1655,18 @@ if(interiorwallsurfaces.size > 0)
                 @handle << "<bldg:IntBuildingInstallation gml:id=\"#{key}\">\n"
               end
               
-              @handle << "<#{lod}>\n"
+              #@handle << "<#{lod}>\n"
+			  tmp_str = "<#{lod}>\n"
+			  tmp_str = tmp_str.sub! 'MultiSurface', 'Geometry'
+			  @handle << tmp_str
               @handle << "<gml:MultiSurface"
               coordinateSystemString()
               @handle << ">\n"
               @handle << value
               @handle << "</gml:MultiSurface>\n"
-              @handle << "</#{lod}>\n"
+              #@handle << "</#{lod}>\n"
+			  tmp_str = tmp_str[1, tmp_str.length-3]
+              @handle << "</#{tmp_str}>\n"
               @handle << "</bldg:IntBuildingInstallation>\n"
               @handle << "</bldg:boundedBy>\n"
             else
@@ -1667,13 +1682,18 @@ if(interiorwallsurfaces.size > 0)
                     @handle << "<bldg:IntBuildingInstallation gml:id=\"#{key}\">\n"
                   end
 
-                  @handle << "<#{lod}>\n"
+                  #@handle << "<#{lod}>\n"
+			      tmp_str = "<#{lod}>\n"
+			      tmp_str = tmp_str.sub! 'MultiSurface', 'Geometry'
+			      @handle << tmp_str
                   @handle << "<gml:MultiSurface"
                   coordinateSystemString()
                   @handle << ">\n"
                   @handle << v
                   @handle << "</gml:MultiSurface>\n"
-                  @handle << "</#{lod}>\n"
+                  #@handle << "</#{lod}>\n"
+			      tmp_str = tmp_str[1, tmp_str.length-3]
+                  @handle << "</#{tmp_str}>\n"
                   @handle << "</bldg:IntBuildingInstallation>\n"
                   @handle << "</bldg:boundedBy>\n"
                 end
@@ -1687,7 +1707,10 @@ if(interiorwallsurfaces.size > 0)
                   @handle << "<bldg:IntBuildingInstallation gml:id=\"#{key}\">\n"
                 end
 
-                @handle << "<#{lod}>\n"
+                #@handle << "<#{lod}>\n"
+			    tmp_str = "<#{lod}>\n"
+			    tmp_str = tmp_str.sub! 'MultiSurface', 'Geometry'
+			    @handle << tmp_str
                 @handle << "<gml:MultiSurface"
                 coordinateSystemString()
                 @handle << ">\n"
@@ -1695,7 +1718,9 @@ if(interiorwallsurfaces.size > 0)
                   @handle << v
                 end
                 @handle << "</gml:MultiSurface>\n"
-                @handle << "</#{lod}>\n"
+                #@handle << "</#{lod}>\n"
+			    tmp_str = tmp_str[1, tmp_str.length-3]
+                @handle << "</#{tmp_str}>\n"
                 @handle << "</bldg:IntBuildingInstallation>\n"
                 @handle << "</bldg:boundedBy>\n"
               end
@@ -1717,13 +1742,18 @@ if(interiorwallsurfaces.size > 0)
                 @handle << "<bldg:BuildingInstallation gml:id=\"#{key}\">\n"
               end
               
-              @handle << "<#{lod}>\n"
+              #@handle << "<#{lod}>\n"
+			  tmp_str = "<#{lod}>\n"
+			  tmp_str = tmp_str.sub! 'MultiSurface', 'Geometry'
+			  @handle << tmp_str
               @handle << "<gml:MultiSurface"
               coordinateSystemString()
               @handle << ">\n"
               @handle << value
               @handle << "</gml:MultiSurface>\n"
-              @handle << "</#{lod}>\n"
+              #@handle << "</#{lod}>\n"
+			  tmp_str = tmp_str[1, tmp_str.length-3]
+              @handle << "</#{tmp_str}>\n"
               @handle << "</bldg:BuildingInstallation>\n"
               @handle << "</bldg:boundedBy>\n"
             else
@@ -1739,13 +1769,18 @@ if(interiorwallsurfaces.size > 0)
                     @handle << "<bldg:BuildingInstallation gml:id=\"#{key}\">\n"
                   end
 
-                  @handle << "<#{lod}>\n"
+                  #@handle << "<#{lod}>\n"
+			      tmp_str = "<#{lod}>\n"
+			      tmp_str = tmp_str.sub! 'MultiSurface', 'Geometry'
+			      @handle << tmp_str
                   @handle << "<gml:MultiSurface"
                   coordinateSystemString()
                   @handle << ">\n"
                   @handle << v
                   @handle << "</gml:MultiSurface>\n"
-                  @handle << "</#{lod}>\n"
+                  #@handle << "</#{lod}>\n"
+				  tmp_str = tmp_str[1, tmp_str.length-3]
+				  @handle << "</#{tmp_str}>\n"
                   @handle << "</bldg:BuildingInstallation>\n"
                   @handle << "</bldg:boundedBy>\n"
                 end
@@ -1759,7 +1794,10 @@ if(interiorwallsurfaces.size > 0)
                   @handle << "<bldg:BuildingInstallation gml:id=\"#{key}\">\n"
                 end
 
-                @handle << "<#{lod}>\n"
+                #@handle << "<#{lod}>\n"
+			    tmp_str = "<#{lod}>\n"
+			    tmp_str = tmp_str.sub! 'MultiSurface', 'Geometry'
+			    @handle << tmp_str
                 @handle << "<gml:MultiSurface"
                 coordinateSystemString()
                 @handle << ">\n"
@@ -1767,7 +1805,9 @@ if(interiorwallsurfaces.size > 0)
                   @handle << v
                 end
                 @handle << "</gml:MultiSurface>\n"
-                @handle << "</#{lod}>\n"
+                #@handle << "</#{lod}>\n"
+			    tmp_str = tmp_str[1, tmp_str.length-3]
+                @handle << "</#{tmp_str}>\n"
                 @handle << "</bldg:BuildingInstallation>\n"
                 @handle << "</bldg:boundedBy>\n"
               end
@@ -1967,10 +2007,10 @@ if(interiorwallsurfaces.size > 0)
     #Parameter 9: wallsurfaces ist Buffer für WallSurfaces ## doplneny pozadovany typ a precislovano
     #Parameter 10: floorsurfaces ist Buffer für FloorSurfaces
 	#Parameter 11: nosurfacetype ist Buffer für alle Flächen ohne Surfacetyp
-    def writeface(face, transformation, za, tw, actbuildingid, polygonpos, groundsurfaces, roofsurfaces, wallsurfaces, floorsurfaces, outerfloorsurfaces, intbuildinginstallations, buildinginstallations, doors, windows, ceilingsurfaces, interiorwallsurfaces, nosurfacetype)
-      
-      result = Sketchup.set_status_text "#{$exported_entities.to_s()}/#{$total_entities.to_s()} entities exported!", SB_PROMPT
-      $exported_entities += 1
+    def writeface(face, transformation, za, tw, actbuildingid, polygonpos, groundsurfaces, roofsurfaces, wallsurfaces, floorsurfaces, outerfloorsurfaces, intbuildinginstallations, buildinginstallations, doors, windows, ceilingsurfaces, interiorwallsurfaces, nosurfacetype)      
+      #result = Sketchup.set_status_text "#{$exported_entities.to_s()}/#{$total_entities.to_s()} entities exported!", SB_PROMPT
+      $pb.update_progress_bar($exported_entities)
+	  $exported_entities += 1
       
       #puts $exported_entities.to_s()
       
@@ -1992,7 +2032,7 @@ if(interiorwallsurfaces.size > 0)
           modus = 3
         elsif(layer == "RoofSurface")
           modus = 2
-		    elsif(layer == "FloorSurface")
+		elsif(layer == "FloorSurface")
           modus = 5 ## 
         elsif(layer == "OuterFloorSurface")
           modus = 7 ## 
@@ -2053,13 +2093,13 @@ if(interiorwallsurfaces.size > 0)
       #puts e
       #end
 
-      if(@gmlType == 1)
-        tmpfile << "<gml:solidMember>\n"
-        tmpfile << "<gml:Solid>\n"
-        tmpfile << "<gml:exterior>\n"
-      else
-        tmpfile << "<gml:surfaceMember>\n"
-      end
+      #if(@gmlType == 1)
+        #tmpfile << "<gml:solidMember>\n"
+        #tmpfile << "<gml:Solid>\n"
+        #tmpfile << "<gml:exterior>\n"
+      #else
+      tmpfile << "<gml:surfaceMember>\n"
+      #end
       
       #gml:id vorhanden? sonst generieren, wenn vorher erlaubt wurde
       if(polygonID != nil)
@@ -2268,13 +2308,13 @@ if(interiorwallsurfaces.size > 0)
       end
       tmpfile << "</gml:Polygon>\n"
 
-      if(@gmlType == 1)
-        tmpfile << "</gml:exterior>\n"
-        tmpfile << "</gml:Solid>\n"
-        tmpfile << "</gml:solidMember>\n"
-      else
-        tmpfile << "</gml:surfaceMember>\n"
-      end
+      #if(@gmlType == 1)
+        #tmpfile << "</gml:exterior>\n"
+        #tmpfile << "</gml:Solid>\n"
+        #tmpfile << "</gml:solidMember>\n"
+      #else
+      tmpfile << "</gml:surfaceMember>\n"
+      #end
       
       surfaceid = FHGelsenkirchen::stringDecode(face.get_attribute("Standard attribute", "BoundarySurfaceType ID"))
       case(modus) ## doplneny pozadovany typ

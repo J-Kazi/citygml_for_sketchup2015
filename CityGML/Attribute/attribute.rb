@@ -1,3 +1,5 @@
+require 'CityGML\UI\ProgressBar'
+
 module FHGelsenkirchen
   class AttributeEdit
     @@stdAvailableBuildingAttributes = ['id','description','name','creationDate','terminationDate','class','function','usage','yearOfConstruction','yearOfDemolition','roofType','measuredHeight','storeysAboveGround','storeysBelowGround','storeyHeightsAboveGround','storeyHeightsBelowGround',]
@@ -157,8 +159,13 @@ module FHGelsenkirchen
     @window = false
     @ceilingsurface = false
     @interiorwallsurface = false
+	total_entities = entities.count
+	pb = ProgressBar.new(total_entities, "Progress...")
+	count_elements = 0
     
     entities.each do |e|
+	  count_elements += 1
+	  pb.update_progress_bar(count_elements)
       if(e.class == Sketchup::Face)
         if(type != nil)
           begin
@@ -181,6 +188,13 @@ module FHGelsenkirchen
         setsurfacetype(e.definition.entities, type)
       end
     end
+	dlg_report = UI::WebDialog.new("C", false, nil, 0, 0, 0, 0,false)
+	dlg_report.set_position(400, 400)
+	dlg_report.set_on_close{
+		UI.messagebox("Surfacetype(s) changed!", MB_OK)
+	}
+	dlg_report.show()
+	dlg_report.close()
   end
 
   def FHGelsenkirchen::setsurfaceid(entities, hash)
@@ -223,7 +237,8 @@ module FHGelsenkirchen
         value = nil #= e.get_attribute "Standard attribute", "SurfaceType", nil
         #value = e.layer.name
         #if(e.layer.name != value) ## doplnit vybrane typy ploch / floorsurface
-        if(e.layer.name == "GroundSurface" or e.layer.name == "WallSurface" or e.layer.name == "FloorSurface" or e.layer.name == "RoofSurface" or e.layer.name == "ReliefFeature" or e.layer.name == "OuterFloorSurface" or e.layer.name == "IntBuildingInstallation" or e.layer.name == "BuildingInstallation" or e.layer.name == "Door" or e.layer.name == "Window" or e.layer.name == "CeilingSurface" or e.layer.name == "InteriorWallSurface" or e.layer.name == "No Surfacetype")
+        #if(e.layer.name == "GroundSurface" or e.layer.name == "WallSurface" or e.layer.name == "FloorSurface" or e.layer.name == "RoofSurface" or e.layer.name == "ReliefFeature" or e.layer.name == "OuterFloorSurface" or e.layer.name == "IntBuildingInstallation" or e.layer.name == "BuildingInstallation" or e.layer.name == "Door" or e.layer.name == "Window" or e.layer.name == "CeilingSurface" or e.layer.name == "InteriorWallSurface" or e.layer.name == "No Surfacetype")
+		if(e.layer.name == "GroundSurface" or e.layer.name == "WallSurface" or e.layer.name == "FloorSurface" or e.layer.name == "RoofSurface" or e.layer.name == "ReliefFeature" or e.layer.name == "IntBuildingInstallation" or e.layer.name == "BuildingInstallation" or e.layer.name == "Door" or e.layer.name == "Window" or e.layer.name == "CeilingSurface" or e.layer.name == "InteriorWallSurface" or e.layer.name == "No Surfacetype")
           #e.set_attribute "Standard attribute", "SurfaceType", e.layer.name
           value = e.layer.name
         end
